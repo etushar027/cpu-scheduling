@@ -30,6 +30,8 @@ typedef struct process_queue{
 typedef struct ganttChartStep{
 	int pid;
 	int clock;	
+	int startTime;
+	int endTime;
 } GanttChartStep;
 GanttChartStep ganttChartStepArray[200];
 
@@ -222,7 +224,7 @@ Process *nextScheduledProcess(void){
 	/*//TODO
 	printf("\n inside nextScheduledProcess --- pid %d , burst time %d",grabNext->pid,grabNext->burstTime);*/
 	dequeueProcess(&readyQueue);
-	/*printf("\n inside nextScheduledProcess --- pid %d , burst time %d",grabNext->pid,grabNext->burstTime);*/
+	//printf("\n inside nextScheduledProcess --- pid %d , burst time %d",grabNext->pid,grabNext->burstTime);
 	return grabNext;
 }
 
@@ -257,9 +259,9 @@ void *priority_aging(void *p)
 		Process *currProcess;
 		currProcess = nextScheduledProcess();//get the next process at the front of ready queue
 		// Set the clock to new value - only if current process has arrival time greater than the clock	
-		if(theClock==0)
-		  currProcess->arrivalTime=theClock;
-		//theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
+		/*if(theClock==0)
+		  currProcess->arrivalTime=theClock;*/
+		theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
 		currProcess->startTime=theClock; // consider the current process execution just started
 		printf("\n\t Starting the process %d ",currProcess->pid);
 		printf("\n\t time on the clock is now : %d  ",theClock);
@@ -284,6 +286,8 @@ void *priority_aging(void *p)
 		//----------------preapring steps for gantt chart-----------
 		ganttChartStepArray[step].pid=currProcess->pid;
 		ganttChartStepArray[step].clock=theClock;
+		ganttChartStepArray[step].startTime=currProcess->startTime;
+		ganttChartStepArray[step].endTime=currProcess->endTime;
 		step++;	
 		
 		/*noOfPendingProcess--; // decreasing by 1 as one process executed already
@@ -371,7 +375,9 @@ void *fcfs(void *p)
 		currProcess = nextScheduledProcess();//get the next process at the front of ready queue	  
 		printf("\n\t===================================================================");
 		// Set the clock to new value - only if current process has arrival time greater than the clock		
-		//theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
+		theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
+		//if(theClock==0)
+		  //currProcess->arrivalTime=theClock;
 		currProcess->startTime=theClock; // consider the current process execution just started
 
 
@@ -398,6 +404,10 @@ void *fcfs(void *p)
 		//----------------preapring steps for gantt chart-----------
 		ganttChartStepArray[step].pid=currProcess->pid;
 		ganttChartStepArray[step].clock=theClock;
+		ganttChartStepArray[step].startTime=currProcess->startTime;
+		ganttChartStepArray[step].endTime=currProcess->endTime;
+		
+		
 		step++;
 	}
 
@@ -443,7 +453,7 @@ void *roundRobin(void *p)
 		currProcess = nextScheduledProcess();//get the next process at the front of ready queue
 		
 		// Set the clock to new value - only if current process has arrival time greater than the clock		
-		//theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
+		theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
 		currProcess->startTime=theClock; // consider the current process execution just started //remainingBurst
 
 
@@ -490,6 +500,8 @@ void *roundRobin(void *p)
 		//----------------preapring steps for gantt chart-----------
 		ganttChartStepArray[step].pid=currProcess->pid;
 		ganttChartStepArray[step].clock=theClock;
+		ganttChartStepArray[step].startTime=currProcess->startTime;
+		ganttChartStepArray[step].endTime=currProcess->endTime;
 		step++;
 		
 		
@@ -525,15 +537,22 @@ void dispalyGanttChart()
             break;
         else // continue
         {
-            int executionlength;
-            if(step==0)
+           if(step>0)
+            {
+                int gap=ganttChartStepArray[step].startTime-ganttChartStepArray[step-1].endTime;
+                for(int i=0;i<gap*time_width;i++)
+                    printf("-");
+            }
+           int executionlength;
+            executionlength=ganttChartStepArray[step].endTime-ganttChartStepArray[step].startTime;
+            /*if(step==0)
             {
                 executionlength=ganttChartStepArray[step].clock;
             }
             else
             {
                 executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
-            }
+            }*/
             
             for(int x=0;x<executionlength*time_width;x++)
             {
@@ -554,15 +573,23 @@ void dispalyGanttChart()
             break;
         else//continue
         {
+            if(step>0)
+            {
+                int gap=ganttChartStepArray[step].startTime-ganttChartStepArray[step-1].endTime;
+                printf("%*c",gap*time_width,'|');
+            }
+                
             int executionlength;
-            if(step==0)
+            executionlength=ganttChartStepArray[step].endTime-ganttChartStepArray[step].startTime;
+            
+            /*if(step==0)
             {
                 executionlength=ganttChartStepArray[step].clock;
             }
             else
             {
                 executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
-            }           
+            } */          
             
     		unsigned z=executionlength*time_width;
     		printf("%*u", z - (z/2), ganttChartStepArray[step].pid);
@@ -581,15 +608,24 @@ void dispalyGanttChart()
             break;
         else // continue
         {
+            if(step>0)
+            {
+                int gap=ganttChartStepArray[step].startTime-ganttChartStepArray[step-1].endTime;
+                for(int i=0;i<gap*time_width;i++)
+                    printf("-");
+            }
+                
+            
             int executionlength;
-            if(step==0)
+            /*if(step==0)
             {
                 executionlength=ganttChartStepArray[step].clock;
             }
             else
             {
                 executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
-            }
+            }*/
+           executionlength=ganttChartStepArray[step].endTime-ganttChartStepArray[step].startTime;
             
             for(int x=0;x<executionlength*time_width;x++)
             {
@@ -609,16 +645,21 @@ void dispalyGanttChart()
             break;
         else//continue
         {
+            if(step>0)
+            {
+                int gap=ganttChartStepArray[step].startTime-ganttChartStepArray[step-1].endTime;
+                printf("%*c",gap*time_width,'|');
+            }
             int executionlength;
-            if(step==0)
+            /*if(step==0)
             {
                 executionlength=ganttChartStepArray[step].clock;
             }
             else
             {
                 executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
-            }           
-            
+            } */          
+            executionlength=ganttChartStepArray[step].endTime-ganttChartStepArray[step].startTime;
     		unsigned z=executionlength*time_width;    		
     		printf("%*c", z, '|' );
         }
@@ -627,25 +668,35 @@ void dispalyGanttChart()
     //5th line
     //print clock , use spaces to align the process at the right end
     printf("\n");
-    printf("0");
+    
+    
     for(int step=0;step<200;step++)
     {
         if(ganttChartStepArray[step].pid==0 && ganttChartStepArray[step].clock==0)//this marks end of all steps , so break
             break;
         else//continue
         {
+            if (step==0){
+                printf("%d",ganttChartStepArray[step].startTime);
+            }
+            if(step>0)
+            {
+                int gap=ganttChartStepArray[step].startTime-ganttChartStepArray[step-1].endTime;
+                printf("%*d",gap*time_width,ganttChartStepArray[step].startTime);
+            }
             int executionlength;
-            if(step==0)
+            /*if(step==0)
             {
                 executionlength=ganttChartStepArray[step].clock;
             }
             else
             {
                 executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
-            }   
+            } */  
+           executionlength=ganttChartStepArray[step].endTime-ganttChartStepArray[step].startTime;
             	
     		unsigned z=executionlength*time_width;    		
-    		printf("%*d", z, ganttChartStepArray[step].clock );
+    		printf("%*d", z, ganttChartStepArray[step].endTime );
         }
     }
 		
