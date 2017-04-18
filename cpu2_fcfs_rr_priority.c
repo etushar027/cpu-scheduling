@@ -27,6 +27,12 @@ typedef struct process_queue{
 	struct process_node *back;
 } Process_queue;
 
+typedef struct ganttChartStep{
+	int pid;
+	int clock;	
+} GanttChartStep;
+GanttChartStep ganttChartStepArray[200];
+
 Process processes[MAX_PROCESSES+1];
 // Temporary "Pre-Ready" queue
 Process *tmpQueue[MAX_PROCESSES+1];
@@ -38,6 +44,8 @@ int totalTurnArroundTime;
 float avgWaitingTime;
 float avgTurnArroundTime;
 
+unsigned int time_width = 4;
+
 
 // Ready process queue
 Process_queue readyQueue;
@@ -47,6 +55,7 @@ Process_node *createProcessNode(Process *);
 void initializeProcessQueue(Process_queue *);
 void enqueueProcess(Process_queue *, Process *);
 void dequeueProcess(Process_queue *);
+void dispalyGanttChart();
 /**
  * Resets all global variables to 0 
  */
@@ -59,6 +68,8 @@ void resetVariables(void){
 	avgWaitingTime=0;
 	avgTurnArroundTime=0;
 }
+
+
 
 void accept(int ch)
 {
@@ -78,26 +89,19 @@ processes[i].remainingBurst=processes[i].burstTime;
 processes[i].endTime=processes[i].arrivalTime;
 }
 }
-if(ch==3)
+else if(ch==3)
 {
 printf("\n\tArrival Time , Burst Time and Priority\n");
-for(i=0;i<numberOfProcesses;i++)
+for(int i=0;i<numberOfProcesses;i++)
 {
 printf("\tEnter for Process %d :",i);
+processes[i].pid=i;
 scanf("%d%d%d",&processes[i].arrivalTime,&processes[i].burstTime,&processes[i].priority);
-processes[i].pid=i;
+processes[i].remainingBurst=processes[i].burstTime;
+processes[i].endTime=processes[i].arrivalTime;
 }
 }
-if(ch==4)
-{
-printf("\n\tArrival Time and Burst Time\n");
-for(i=0;i<numberOfProcesses;i++)
-{
-printf("\tEnter for Process %d :",i);
-scanf("%d%d",&processes[i].arrivalTime,&processes[i].burstTime);
-processes[i].pid=i;
-}
-}
+
 }
 
 /**
@@ -128,9 +132,31 @@ void initializeProcessQueue(Process_queue *q){
  */
 int compareArrivalTime(const void *a, const void *b){
 	Process *first = (Process *) a;
-	Process *second = (Process *) b;
+	Process *second = (Process *) b;	
 	return first->arrivalTime - second->arrivalTime;
 }
+
+/**
+ * Compare arrival time of two processes
+ */
+int comparePriorityAndArrivalTime(const void *a, const void *b){
+	Process *first = (Process *) a;
+	Process *second = (Process *) b;
+	int priorityDiff=first->priority - second->priority;
+	if(priorityDiff==0)
+	{
+	    return first->arrivalTime - second->arrivalTime;
+	}
+	else{
+	    return -priorityDiff;
+	}
+	
+	
+}
+
+
+
+
 
 /**
  * Compare process ID of two processes
@@ -192,21 +218,141 @@ Process *nextScheduledProcess(void){
 	if (readyQueue.size == 0){
 		return NULL;
 	}
-	//printf("readyQueue.front->data->pid %d",readyQueue.front->data->pid);
 	Process *grabNext = readyQueue.front->data;
+	/*//TODO
+	printf("\n inside nextScheduledProcess --- pid %d , burst time %d",grabNext->pid,grabNext->burstTime);*/
 	dequeueProcess(&readyQueue);
+	/*printf("\n inside nextScheduledProcess --- pid %d , burst time %d",grabNext->pid,grabNext->burstTime);*/
 	return grabNext;
 }
 
+
+void *priority_aging(void *p)
+{
+	int i,step,noOfPendingProcess;
+	float avgtat=0,avgwt=0;
+
+	resetVariables();
+	initializeProcessQueue(&readyQueue);
+	
+    
+	accept(3);
+	noOfPendingProcess=numberOfProcesses;
+	qsort(processes, numberOfProcesses, sizeof(Process), comparePriorityAndArrivalTime);// sort based on priority and arrival time
+    
+    addNewIncomingProcess();
+	// enqueue processes to readyqueue
+	for(i=0;i<numberOfProcesses;i++)
+	{
+		enqueueProcess(&readyQueue, tmpQueue[i]);
+	}
+	theClock=0;
+	//Run processes
+	Process *currProcess;
+	//currProcess=malloc(sizeof(Process));
+	
+	printf("\n\t=============================================================================================\n");
+	while(readyQueue.size > 0)
+	{
+		Process *currProcess;
+		currProcess = nextScheduledProcess();//get the next process at the front of ready queue
+		// Set the clock to new value - only if current process has arrival time greater than the clock	
+		if(theClock==0)
+		  currProcess->arrivalTime=theClock;
+		//theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
+		currProcess->startTime=theClock; // consider the current process execution just started
+		printf("\n\t Starting the process %d ",currProcess->pid);
+		printf("\n\t time on the clock is now : %d  ",theClock);
+		printf("\n\t Process %d arrived at %d on the clock",currProcess->pid,currProcess->arrivalTime);
+		currProcess->waitingTime=currProcess->startTime-currProcess->arrivalTime;
+		printf("\n\t Waiting time for process %d = %d",currProcess->pid,currProcess->waitingTime);
+
+        //printf("\n\t burstTime time for process %d , burstTime = %d",currProcess->pid,currProcess->burstTime);
+        
+		theClock=theClock+currProcess->burstTime; // Set the clock to new value, by adding the time taken to run current process (considering current process just finshed)
+		currProcess->endTime=theClock;
+		currProcess->turnArroundTime=currProcess->endTime-currProcess->arrivalTime;
+		printf("\n\t End of process %d ",currProcess->pid);
+		printf("\n\t time on the clock is now : %d  ",theClock);
+		printf("\n\t Turn Around Time for process %d = %d ",currProcess->pid,currProcess->turnArroundTime);
+		
+		totalTurnArroundTime=totalTurnArroundTime+currProcess->turnArroundTime;
+		totalWaitingTime=totalWaitingTime+currProcess->waitingTime;
+		printf("\n\t============================================================================================");
+		
+		
+		//----------------preapring steps for gantt chart-----------
+		ganttChartStepArray[step].pid=currProcess->pid;
+		ganttChartStepArray[step].clock=theClock;
+		step++;	
+		
+		/*noOfPendingProcess--; // decreasing by 1 as one process executed already
+		Process pendingProcArray[noOfPendingProcess];// declaring array to be used for sorting
+		Process *pendingProcPointerArray[noOfPendingProcess];// declaring array to be used for sorting
+		int j=0;
+		while(readyQueue.size > 0)
+		{
+		    
+		    currProcess = nextScheduledProcess();//get the next process at the front of ready queue
+		    currProcess->waitingTime=theClock-currProcess->arrivalTime; // waiting time so far
+		    currProcess->priority=currProcess->priority+currProcess->waitingTime; // increase priority by the waiting timing so far		    
+		    pendingProcArray[j].arrivalTime=currProcess->arrivalTime;	
+		    pendingProcArray[j].pid=currProcess->pid;
+		    pendingProcArray[j].priority=currProcess->priority;
+		    pendingProcArray[j].burstTime=currProcess->burstTime;
+		    pendingProcArray[j].waitingTime=currProcess->waitingTime;
+		    
+		    j++;
+		}
+		
+		qsort(pendingProcArray, noOfPendingProcess, sizeof(Process), comparePriorityAndArrivalTime);// sort based on priority and arrival time
+
+        //TODO
+        printf("\n noOfPendingProcess %d",noOfPendingProcess);
+        for(int i=0;i<noOfPendingProcess;i++)
+        {
+            pendingProcPointerArray[i]=&pendingProcArray[i];
+            printf("\n i %d , pid %d , priority %d , burstTime %d",i,pendingProcPointerArray[i]->pid , pendingProcPointerArray[i]->priority, pendingProcPointerArray[i]->burstTime);//TODO
+        }
+
+        //addNewIncomingProcess();
+    	// enqueue processes to readyqueue
+    	//initializeProcessQueue(&readyQueue);
+    	printf("\n readyQueue.size %d ", readyQueue.size);//TODO
+    	for(int i=0;i<noOfPendingProcess;i++)
+    	{
+    		
+    		enqueueProcess(&readyQueue, pendingProcPointerArray[i]);
+    		printf("\n readyQueue.size %d ", readyQueue.size);//TODO
+    	}
+    	*/
+		
+		
+	}
+
+	avgTurnArroundTime=totalTurnArroundTime/numberOfProcesses;
+	avgWaitingTime=totalWaitingTime/numberOfProcesses; 
+	
+	 printf("\n\n");
+	dispalyGanttChart();
+    printf("\n\n");
+	printf("\n\t Average Turn Around Time:%f ",avgTurnArroundTime);
+	printf("\n\t Average waiting time:%f ",avgWaitingTime);
+	printf("\n\n");
+	pthread_exit(NULL);
+	
+}
+
+
 void *fcfs(void *p)
 {
-	int i;
+	int i,step;
 	float avgtat=0,avgwt=0;
 
 	resetVariables();
 	initializeProcessQueue(&readyQueue);	
 	accept(1);
-	qsort(processes, numberOfProcesses, sizeof(Process*), compareArrivalTime);
+	qsort(processes, numberOfProcesses, sizeof(Process), compareArrivalTime);
 
     addNewIncomingProcess();
 	// enqueue processes to readyqueue
@@ -222,10 +368,10 @@ void *fcfs(void *p)
 		
 	while(readyQueue.size > 0){	   
 		
-		currProcess = nextScheduledProcess();//get the next process at the front of ready queue
-		printf("\n\t=============================================================================================");
+		currProcess = nextScheduledProcess();//get the next process at the front of ready queue	  
+		printf("\n\t===================================================================");
 		// Set the clock to new value - only if current process has arrival time greater than the clock		
-		theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
+		//theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
 		currProcess->startTime=theClock; // consider the current process execution just started
 
 
@@ -247,19 +393,29 @@ void *fcfs(void *p)
 		totalTurnArroundTime=totalTurnArroundTime+currProcess->turnArroundTime;
 		totalWaitingTime=totalWaitingTime+currProcess->waitingTime;
 		printf("\n\t================================================================================================");
+		
+		
+		//----------------preapring steps for gantt chart-----------
+		ganttChartStepArray[step].pid=currProcess->pid;
+		ganttChartStepArray[step].clock=theClock;
+		step++;
 	}
 
 	avgTurnArroundTime=totalTurnArroundTime/numberOfProcesses;
 	avgWaitingTime=totalWaitingTime/numberOfProcesses;    
 
+	printf("\n\n");
+	dispalyGanttChart();
+    printf("\n\n");
 	printf("\n\t Average Turn Around Time:%f ",avgTurnArroundTime);
 	printf("\n\t Average waiting time:%f ",avgWaitingTime);
+	printf("\n\n");
 	
 }
 
 void *roundRobin(void *p)
 {
-	int i;
+	int i,step;
 	float avgtat=0,avgwt=0;
 
 	resetVariables();
@@ -268,7 +424,7 @@ void *roundRobin(void *p)
 	scanf("%d",&timeQuantum);
     
 	accept(2);
-	qsort(processes, numberOfProcesses, sizeof(Process*), compareArrivalTime);
+	qsort(processes, numberOfProcesses, sizeof(Process), compareArrivalTime);
 
     addNewIncomingProcess();
 	// enqueue processes to readyqueue
@@ -281,13 +437,13 @@ void *roundRobin(void *p)
 	Process *currProcess;
 	//currProcess=malloc(sizeof(Process));
 	
-		
+		printf("\n\t=============================================================================================\n");
 	while(readyQueue.size > 0){	   
 		
 		currProcess = nextScheduledProcess();//get the next process at the front of ready queue
-		printf("\n\t=============================================================================================");
+		
 		// Set the clock to new value - only if current process has arrival time greater than the clock		
-		theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
+		//theClock=theClock>currProcess->arrivalTime?theClock:currProcess->arrivalTime;	
 		currProcess->startTime=theClock; // consider the current process execution just started //remainingBurst
 
 
@@ -296,7 +452,7 @@ void *roundRobin(void *p)
 		
 		printf("\n\t currProcess->startTime %d ",currProcess->startTime);
 		printf("\n\t currProcess->endTime %d ",currProcess->endTime);
-		//printf("\n\t Process %d arrived at %d on the clock",currProcess->pid,currProcess->arrivalTime);
+		printf("\n\t Process %d arrived at %d on the clock",currProcess->pid,currProcess->arrivalTime);
 
         //waiting time is --> waiting time so far the process + current start time - last end time of the process
 		currProcess->waitingTime=currProcess->startTime-currProcess->endTime;
@@ -327,17 +483,173 @@ void *roundRobin(void *p)
 		totalWaitingTime=totalWaitingTime+currProcess->waitingTime;
 		printf("\n\t totalWaitingTime :%d ",totalWaitingTime);
 		printf("\n\t================================================================================================");
+		
+		
+		
+		
+		//----------------preapring steps for gantt chart-----------
+		ganttChartStepArray[step].pid=currProcess->pid;
+		ganttChartStepArray[step].clock=theClock;
+		step++;
+		
+		
+		
+		
 	}
 
 	avgTurnArroundTime=totalTurnArroundTime/numberOfProcesses;
-	avgWaitingTime=totalWaitingTime/numberOfProcesses;    
-
+	avgWaitingTime=totalWaitingTime/numberOfProcesses; 
+	
+	 printf("\n\n");
+	dispalyGanttChart();
+    printf("\n\n");
 	printf("\n\t Average Turn Around Time:%f ",avgTurnArroundTime);
 	printf("\n\t Average waiting time:%f ",avgWaitingTime);
+	printf("\n\n");
 	pthread_exit(NULL);
 	
 }
 
+
+
+void dispalyGanttChart()
+{
+    printf("========Here goes the gantt chart========\n");
+    
+    //1st line 
+    // print  '-' equals to the time taken for execution of each step
+    printf("-");
+    for(int step=0;step<200;step++)//for each step
+    {
+        if(ganttChartStepArray[step].pid==0 && ganttChartStepArray[step].clock==0)//this marks end of all steps , so break
+            break;
+        else // continue
+        {
+            int executionlength;
+            if(step==0)
+            {
+                executionlength=ganttChartStepArray[step].clock;
+            }
+            else
+            {
+                executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
+            }
+            
+            for(int x=0;x<executionlength*time_width;x++)
+            {
+		       printf("-");
+		    }
+    		
+        }
+    }
+    
+      
+    //2nd line
+    //print process ids , use spaces to align the process id at the middle
+    printf("\n");
+    printf("|");
+    for(int step=0;step<200;step++)
+    {
+        if(ganttChartStepArray[step].pid==0 && ganttChartStepArray[step].clock==0)//this marks end of all steps , so break
+            break;
+        else//continue
+        {
+            int executionlength;
+            if(step==0)
+            {
+                executionlength=ganttChartStepArray[step].clock;
+            }
+            else
+            {
+                executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
+            }           
+            
+    		unsigned z=executionlength*time_width;
+    		printf("%*u", z - (z/2), ganttChartStepArray[step].pid);
+    		printf("%*c", z/2, '|' );
+        }
+    }
+    
+    
+    //3rd line 
+    // print  '-' equals to the time taken for execution of each step
+    printf("\n");
+    printf("-");
+    for(int step=0;step<200;step++)//for each step
+    {
+        if(ganttChartStepArray[step].pid==0 && ganttChartStepArray[step].clock==0)//this marks end of all steps , so break
+            break;
+        else // continue
+        {
+            int executionlength;
+            if(step==0)
+            {
+                executionlength=ganttChartStepArray[step].clock;
+            }
+            else
+            {
+                executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
+            }
+            
+            for(int x=0;x<executionlength*time_width;x++)
+            {
+		       printf("-");
+		    }
+    		
+        }
+    }
+    
+    //4th line
+    //print | at end of each step , use spaces to align the | at the right end
+    printf("\n");
+    printf("|");
+    for(int step=0;step<200;step++)
+    {
+        if(ganttChartStepArray[step].pid==0 && ganttChartStepArray[step].clock==0)//this marks end of all steps , so break
+            break;
+        else//continue
+        {
+            int executionlength;
+            if(step==0)
+            {
+                executionlength=ganttChartStepArray[step].clock;
+            }
+            else
+            {
+                executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
+            }           
+            
+    		unsigned z=executionlength*time_width;    		
+    		printf("%*c", z, '|' );
+        }
+    }
+    
+    //5th line
+    //print clock , use spaces to align the process at the right end
+    printf("\n");
+    printf("0");
+    for(int step=0;step<200;step++)
+    {
+        if(ganttChartStepArray[step].pid==0 && ganttChartStepArray[step].clock==0)//this marks end of all steps , so break
+            break;
+        else//continue
+        {
+            int executionlength;
+            if(step==0)
+            {
+                executionlength=ganttChartStepArray[step].clock;
+            }
+            else
+            {
+                executionlength=ganttChartStepArray[step].clock-ganttChartStepArray[step-1].clock;
+            }   
+            	
+    		unsigned z=executionlength*time_width;    		
+    		printf("%*d", z, ganttChartStepArray[step].clock );
+        }
+    }
+		
+}
 void main()
 {
 pthread_t thread;
@@ -364,7 +676,12 @@ int rc;
             exit(-1);//exit with error
             }
 	break;
-	case 3: break;
+	case 3: rc=pthread_create(&thread,NULL,priority_aging,(void *) NULL);	// not passing anything
+			if (rc){ printf("ERROR; return code from pthread_create() is %d\n", rc);
+            exit(-1);//exit with error
+            }	
+	       break;
+	       
 	case 4: break;
 
 
@@ -372,6 +689,4 @@ int rc;
 printf("\n\n\tPress any key to continue………");
 pthread_exit(NULL);
 
-
-//getch();
 }
